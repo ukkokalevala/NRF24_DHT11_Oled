@@ -1,0 +1,83 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <RF24.h>
+
+// OLED setup
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1  // Reset pin not used
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// NRF24L01 setup
+#define CE_PIN  9   // Change to your actual CE pin
+#define CSN_PIN 10  // Change to your actual CSN pin
+RF24 radio(CE_PIN, CSN_PIN);
+
+struct Data {
+  float temperature;
+  float humidity;
+} dhtData;
+
+const byte address[6] = "00001";  // Address for NRF24L01 communication
+
+unsigned long previousMillis = 0;
+const long interval = 1000;  // Update display every second
+
+void setup() {
+  Serial.begin(9600);
+
+  // Initialize the OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // I2C address 0x3C
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);  // Don't proceed if OLED init fails
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("OLED Ready");
+  display.display();
+  delay(2000);  // Wait to observe "OLED Ready" message
+
+  // Initialize the NRF24L01
+  if (!radio.begin()) {
+    Serial.println("Radio hardware not responding!");
+    while (1);  // Halt if NRF24L01 fails to initialize
+  }
+  radio.openReadingPipe(0, address);
+  radio.startListening();
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // Check if data is available from NRF24L01
+  if (radio.available()) {
+    radio.read(&dhtData, sizeof(dhtData));
+
+    // Only update the display at intervals
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+
+      // Clear and update OLED display
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.print("Temp: ");
+      display.print(dhtData.temperature);
+      display.print(" C");
+      display.setCursor(0, 10);
+      display.print("Humidity: ");
+      display.print(dhtData.humidity);
+      display.print(" %");
+      display.display();
+
+      // Debug output to Serial Monitor
+      Serial.print("Received Temp: ");
+      Serial.print(dhtData.temperature);
+      Serial.print(" C, Humidity: ");
+      Serial.print(dhtData.humidity);
+      Serial.println(" %");
+    }
+  }
+}
